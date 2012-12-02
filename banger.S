@@ -121,9 +121,9 @@ controller_probe:
 .endm
 
 .macro fetch_bit /* 4 cycles */
-    lsl r17 /* 1 cycle */ /* need to do this first to preserve the last bit */
+    lsr r17 /* 1 cycle */ /* need to do this first to preserve the last bit */
     in r16, _SFR_IO_ADDR(BANG_PIN) /* 1 cycle */
-    andi r16, 1 /* 1 cycle */ /* to filter out all the other bits */
+    andi r16, 128 /* 1 cycle */ /* to filter out all the other bits */
     or r17, r16 /* 1 cycle */ /* comine with the previous string of bits */
 .endm
 
