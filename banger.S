@@ -1,11 +1,11 @@
 #include <avr/io.h>
-#define bang_pin PB0
+#include "avr_gc_usb.h"
 
 .global led
 .global controller_probe
 .global controller_rumble
 .global controller_poll
-.global controller_save_data
+/*.global controller_save_data*/
 .extern controller_data_buff
 
 .macro push_sreg 
@@ -27,10 +27,8 @@
     nop
 .endm
 
-/* assumes that load_reg_vals is executed before this */    
 .macro lo_bit
-    out _SFR_IO_ADDR(PORTB), r16 /* 1 clock */
-    nop 
+    cbi _SFR_IO_ADDR(BANG_PORT), BANG_BIT /* 2 cycles */
     nop
     nop
     four_cycle_nop    
@@ -39,8 +37,7 @@
 .endm
 
 .macro hi_bit
-    out _SFR_IO_ADDR(PORTB), r17 /* 1 clock */
-    nop 
+    sbi _SFR_IO_ADDR(BANG_PORT), BANG_BIT /* 2 cycles */
     nop
     nop
     four_cycle_nop
@@ -78,7 +75,9 @@
     hi_enc_bit
 .endm
 
-
+led:
+    sbi _SFR_IO_ADDR(PORTD), 6
+    reti
 
 controller_probe:
     push_sreg
@@ -86,19 +85,13 @@ controller_probe:
     push r18
     push r19
 
-    ldi r16, 0
-    ldi r17, 1
+    /* The direction register has to be changed because AVRs' internal pullups
+     * are too strong for some controllers. I used external 1k pullup instead */
+    sbi _SFR_IO_ADDR(BANG_DIR), BANG_BIT
 
     send_probe_byte
-    
-/*    data_read_loop:
-    in r18, _SFR_IO_ADDR(PORTB)
-    and r18, r17
-    sbrc r18, 1 *//* skip if bit in register cleared */
-/*    ldi r19, 1
-    ldi r19, 0
-    out _SFR_IO_ADDR(PORTD), r19
-    jmp data_read_loop*/
+
+    cbi _SFR_IO_ADDR(BANG_DIR), BANG_BIT
 
     pop r19
     pop r18
@@ -106,14 +99,57 @@ controller_probe:
     pop_sreg 
     reti
 
+.macro controller_save_data
+    /* The algorithm. In the port with the bang bit to Rb. Or Rb with Rs store
+     * result to Rs. Shift Rs one bit left. Increment loop counter. If loop 
+     * counter reaches 8, store Rs and increment index register. */
+  
+/*    sbi _SFR_IO_ADDR(PORTD), 6 */
+    
+    fetch_loop:
+        fetch_bit /* 4 cycles */
+        inc r18 /* 1 cycle */
+        four_cycle_nop
+        four_cycle_nop        
+        cpi r18, 8 /* 1 cycle */
+    brne fetch_loop /* 2 cycles if brancing (not equal), 1 if equal */
+
+    out _SFR_IO_ADDR(PORTC), r17
+
+    cbi _SFR_IO_ADDR(PORTD), 6
+
+.endm
+
+.macro fetch_bit /* 4 cycles */
+    lsl r17 /* 1 cycle */ /* need to do this first to preserve the last bit */
+    in r16, _SFR_IO_ADDR(BANG_PIN) /* 1 cycle */
+    andi r16, 1 /* 1 cycle */ /* to filter out all the other bits */
+    or r17, r16 /* 1 cycle */ /* comine with the previous string of bits */
+.endm
+
+.macro fetch_r20_bytes
+
+
+
+
+.endm
+
 controller_poll:
     push_sreg
     push r16
     push r17
+    push r18
 
-    ldi r16, 0
-    ldi r17, 1
+    ldi r16, 0xff
+    out _SFR_IO_ADDR(DDRC), r16 /* this is for debug */
 
+    ldi r16, 0 /* temporary io */
+    ldi r17, 0 /* data buffer */
+    ldi r18, 0 /* loop counter */
+
+    sbi _SFR_IO_ADDR(BANG_DIR), BANG_BIT
+    sbi _SFR_IO_ADDR(DDRD), 6 /* debug */
+    
     lo_enc_bit
     hi_enc_bit
     lo_enc_bit
@@ -138,19 +174,20 @@ controller_poll:
     
     hi_enc_bit 
 
+    cbi _SFR_IO_ADDR(BANG_DIR), BANG_BIT
+    
+    controller_save_data
+
+    pop r18
     pop r17
     pop r16
+
     pop_sreg
     reti
 
 controller_rumble:
-    push_sreg
-    push r16
-    push r17
-
-    ldi r16, 0
-    ldi r17, 1
-
+    sbi _SFR_IO_ADDR(BANG_DIR), BANG_BIT
+    
     lo_enc_bit
     hi_enc_bit
     lo_enc_bit
@@ -174,15 +211,14 @@ controller_rumble:
     hi_enc_bit
    
     hi_enc_bit
-
-    pop r17
-    pop r16
-    pop_sreg
-    reti
-
-controller_save_data:
-    push_sreg
     
+    cbi _SFR_IO_ADDR(BANG_DIR), BANG_BIT
 
-    pop_sreg
     reti
+
+.macro six_cycle_nop
+    four_cycle_nop
+    nop
+    nop
+.endm
+
