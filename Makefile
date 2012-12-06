@@ -1,6 +1,6 @@
 PROJECT=avr_gc_usb
-CSOURCES=main.c usb_rawhid.c
-ASSOURCES=banger.S
+CSOURCES=src/main.c src/usb_rawhid.c
+ASSOURCES=src/banger.S
 CC=avr-gcc
 OBJCOPY=avr-objcopy
 OBJDUMP=avr-objdump
