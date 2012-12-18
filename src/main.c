@@ -34,16 +34,19 @@ int main (void)
     usb_buffer[1] = 0xcd; 
     usb_buffer[63] = 4;
     led();
-    controller_mode = probe;
+/*    controller_mode = probe;*/
+    controller_mode = poll;
     while(1){
         switch(controller_mode){
             case(probe):
                 _delay_ms(12);
+                controller_probe();
                 usb_rawhid_send(usb_buffer, 50);
                 break;
             case(poll):
                 controller_poll();
-                _delay_ms(6);
+                usb_rawhid_send(usb_buffer, 50);
+               _delay_ms(6);
                 break;
         }
     }

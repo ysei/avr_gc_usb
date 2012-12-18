@@ -7,6 +7,15 @@
 .global controller_poll
 .extern controller_buffer
 
+/* Uses r27, r26. */
+/*
+.macro controller_load_data_buffer_pointer_to_x
+    ldi  controller_buffer, 
+
+.endm
+*/
+
+
 .macro push_sreg 
     push r16
     in r16, _SFR_IO_ADDR(SREG)
@@ -85,7 +94,8 @@ controller_probe:
     push r19
 
     /* The direction register has to be changed because AVRs' internal pullups
-     * are too strong for some controllers. I used external 1k pullup instead */
+     * are too strong for some controllers. I used external 1k pullup instead 
+     */
     sbi _SFR_IO_ADDR(BANG_DIR), BANG_BIT
 
     send_probe_byte
@@ -98,8 +108,21 @@ controller_probe:
     pop_sreg 
     reti
 
+/* The algorithm. In the port with the bang bit to Rb. Or Rb with Rs store
+ * result to Rs. Shift Rs one bit left. Increment loop counter. If loop 
+ * counter reaches 8, store Rs and increment index register. 
+ * Assumes r17 to be zero and uses it, uses r16 
+ */
+.macro fetch_bit /* 4 cycles */
+    lsr r17 /* 1 cycle */ /* need to do this first to preserve the last bit */
+    in r16, _SFR_IO_ADDR(BANG_PIN) /* 1 cycle */
+    andi r16, 128 /* 1 cycle */ /* to filter out all the other bits */
+    or r17, r16 /* 1 cycle */ /* comine with the previous string of bits */
+.endm
+
 /* Assumes that r18 is zero and uses it. Uses r16 for buffering and stores the 
- * byte to r17. */
+ * byte to r17. 
+ */
 .macro controller_fetch_byte
     fetch_loop:
         fetch_bit /* 4 cycles */
@@ -110,12 +133,6 @@ controller_probe:
     brne fetch_loop /* 2 cycles if branching (not equal), 1 if equal */
 .endm
 
-/* Uses r27, r26. */
-.macro controller_load_data_buffer_pointer_to_x
-    ldi  controller_buffer, 
-
-.endm
-
 .macro controller_save_word
     fetch_loop:
         fetch_bit /* 4 cycles */
@@ -124,32 +141,13 @@ controller_probe:
         four_cycle_nop        
         cpi r18, 8 /* 1 cycle */
     brne fetch_loop /* 2 cycles if branching (not equal), 1 if equal */
-    
-
-
 .endm
 
 .macro controller_save_data
- 
 /*    sbi _SFR_IO_ADDR(PORTD), 6 */
-    
     controller_fetch_byte
-
     out _SFR_IO_ADDR(PORTC), r17
-
-    cbi _SFR_IO_ADDR(PORTD), 6
-
-.endm
-
-/* The algorithm. In the port with the bang bit to Rb. Or Rb with Rs store
- * result to Rs. Shift Rs one bit left. Increment loop counter. If loop 
- * counter reaches 8, store Rs and increment index register. */
-/* Assumes r17 to be zero and uses it, uses r16 */
-.macro fetch_bit /* 4 cycles */
-    lsr r17 /* 1 cycle */ /* need to do this first to preserve the last bit */
-    in r16, _SFR_IO_ADDR(BANG_PIN) /* 1 cycle */
-    andi r16, 128 /* 1 cycle */ /* to filter out all the other bits */
-    or r17, r16 /* 1 cycle */ /* comine with the previous string of bits */
+/*    cbi _SFR_IO_ADDR(PORTD), 6 */
 .endm
 
 controller_poll:
@@ -157,6 +155,8 @@ controller_poll:
     push r16
     push r17
     push r18
+
+    cli
 
     ldi r16, 0xff
     out _SFR_IO_ADDR(DDRC), r16 /* this is for debug */
@@ -195,6 +195,8 @@ controller_poll:
     cbi _SFR_IO_ADDR(BANG_DIR), BANG_BIT
     
     controller_save_data
+    
+    sei
 
     pop r18
     pop r17

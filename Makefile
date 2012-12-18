@@ -9,7 +9,8 @@ MMCU=at90usb1286
 PROGRAMMER=teensy-loader-cli
 F_CPU=16000000
 
-CFLAGS=-mmcu=$(MMCU) -Wall -Os
+#c99 for atomic block
+CFLAGS=-mmcu=$(MMCU) -Wall -Os --std=c99 
 
 ODFLAGS=-D
 
